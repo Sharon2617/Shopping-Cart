@@ -1,0 +1,43 @@
+// script.js
+document.addEventListener("DOMContentLoaded", () => {
+    const productList = document.getElementById("product-list");
+    const cartCount = document.getElementById("cart-count");
+    let cart = JSON.parse(localStorage.getItem("cart")) || [];
+    
+    const updateCartCount = () => {
+        cartCount.textContent = cart.length;
+    };
+    
+    fetch("https://dummyjson.com/products")
+        .then(response => response.json())
+        .then(data => {
+            const products = data.products.slice(0, 6); // Display first 6 products
+            products.forEach(product => {
+                const priceAfterDiscount = (product.price * (1 - product.discountPercentage / 100)).toFixed(2);
+                const productCard = document.createElement("div");
+                productCard.classList.add("product-card");
+                productCard.innerHTML = `
+                    <img src="${product.thumbnail}" alt="${product.title}">
+                    <h3>${product.title}</h3>
+                    <p>₹${priceAfterDiscount} <small>(Original: ₹${product.price})</small></p>
+                    <button class="add-to-cart" data-id="${product.id}" data-title="${product.title}" data-price="${priceAfterDiscount}" data-img="${product.thumbnail}">Add to Cart</button>
+                `;
+                productList.appendChild(productCard);
+            });
+
+            document.querySelectorAll(".add-to-cart").forEach(button => {
+                button.addEventListener("click", (e) => {
+                    const id = e.target.dataset.id;
+                    const title = e.target.dataset.title;
+                    const price = e.target.dataset.price;
+                    const img = e.target.dataset.img;
+                    
+                    cart.push({ id, title, price, img });
+                    localStorage.setItem("cart", JSON.stringify(cart));
+                    updateCartCount();
+                });
+            });
+        });
+    
+    updateCartCount();
+});
