@@ -1,0 +1,184 @@
+// models/product.dart
+class Product {
+  final int id;
+  final String title;
+  final String image;
+  final double price;
+  final double discount;
+
+  Product({
+    required this.id,
+    required this.title,
+    required this.image,
+    required this.price,
+    required this.discount,
+  });
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      id: json['id'],
+      title: json['title'],
+      image: json['thumbnail'],
+      price: json['price'].toDouble(),
+      discount: json['discountPercentage'].toDouble(),
+    );
+  }
+}
+
+// providers/product_provider.dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/product.dart';
+import '../utils/api_service.dart';
+
+final productProvider = FutureProvider<List<Product>>((ref) async {
+  return await ApiService.fetchProducts();
+});
+
+// providers/cart_provider.dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/product.dart';
+
+class CartNotifier extends StateNotifier<List<Product>> {
+  CartNotifier() : super([]);
+
+  void addToCart(Product product) {
+    state = [...state, product];
+  }
+
+  void removeFromCart(Product product) {
+    state = state.where((item) => item.id != product.id).toList();
+  }
+}
+
+final cartProvider = StateNotifierProvider<CartNotifier, List<Product>>(
+    (ref) => CartNotifier());
+
+// utils/api_service.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../models/product.dart';
+
+class ApiService {
+  static Future<List<Product>> fetchProducts() async {
+    final response = await http.get(Uri.parse('https://dummyjson.com/products'));
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body)['products'] as List;
+      return data.map((item) => Product.fromJson(item)).toList();
+    } else {
+      throw Exception('Failed to load products');
+    }
+  }
+}
+
+// screens/catalogue_screen.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/product_provider.dart';
+import '../providers/cart_provider.dart';
+import '../widgets/product_tile.dart';
+import 'cart_screen.dart';
+
+class CatalogueScreen extends ConsumerWidget {
+  const CatalogueScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final productData = ref.watch(productProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Catalogue'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.shopping_cart),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CartScreen()),
+            ),
+          ),
+        ],
+      ),
+      body: productData.when(
+        data: (products) => GridView.builder(
+          padding: const EdgeInsets.all(8.0),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.7,
+          ),
+          itemCount: products.length,
+          itemBuilder: (context, index) {
+            return ProductTile(product: products[index]);
+          },
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text(err.toString())),
+      ),
+    );
+  }
+}
+
+// widgets/product_tile.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/product.dart';
+import '../providers/cart_provider.dart';
+
+class ProductTile extends ConsumerWidget {
+  final Product product;
+  const ProductTile({Key? key, required this.product}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      child: Column(
+        children: [
+          Image.network(product.image, height: 100, fit: BoxFit.cover),
+          Text(product.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('₹${(product.price * (1 - product.discount / 100)).toStringAsFixed(2)}'),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(cartProvider.notifier).addToCart(product);
+            },
+            child: const Text('Add to Cart'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// screens/cart_screen.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/cart_provider.dart';
+import '../widgets/cart_item.dart';
+
+class CartScreen extends ConsumerWidget {
+  const CartScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cartItems = ref.watch(cartProvider);
+    final total = cartItems.fold(0.0, (sum, item) => sum + (item.price * (1 - item.discount / 100)));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cart')),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              itemCount: cartItems.length,
+              itemBuilder: (context, index) {
+                return CartItem(product: cartItems[index]);
+              },
+            ),
+          ),
+          Text('Total: ₹${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20)),
+          ElevatedButton(onPressed: () {}, child: const Text('Checkout')),
+        ],
+      ),
+    );
+  }
+}
